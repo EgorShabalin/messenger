@@ -1,0 +1,12 @@
+version: '3.0'
+
+services:
+  msg_server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python3 server.py
+    ports:
+      - 8000:8000
+    volumes:
+      - .:/code
