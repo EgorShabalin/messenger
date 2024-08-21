@@ -175,7 +175,7 @@ def start_client():
             logging.info("NO messages received by client.")
             print("NO messages received.")
         for msg in messages:
-            print(f"- {msg}")
+            print(f"    {msg}")
 
     while True:
 
