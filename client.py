@@ -16,11 +16,16 @@ logging.basicConfig(
     filename="error.log",
 )
 
-server_url = "https://c99f30b83cb257357f151d48f7125448.serveo.net:443"
+server_url = input("Enter server URL: ")
+
+username = input("Enter your name: ")
 
 
 def generate_session_key():
-    return os.urandom(32)  # 256-bit key for AES
+    session_key = os.urandom(32)  # 256-bit key for AES
+    if session_key:
+        logging.info("Session key created!")
+    return session_key
 
 
 def encrypt_message(message: str, session_key: bytes) -> bytes:
@@ -30,7 +35,10 @@ def encrypt_message(message: str, session_key: bytes) -> bytes:
     )
     encryptor = cipher.encryptor()
     ciphertext = encryptor.update(message.encode()) + encryptor.finalize()
-    return iv + ciphertext
+    result = iv + ciphertext
+    if result:
+        logging.info("Message encrypted!")
+    return result
 
 
 def decrypt_message(encrypted_message: bytes, session_key: bytes) -> str:
@@ -40,15 +48,21 @@ def decrypt_message(encrypted_message: bytes, session_key: bytes) -> str:
         algorithms.AES(session_key), modes.CFB(iv), backend=default_backend()
     )
     decryptor = cipher.decryptor()
-    return (decryptor.update(ciphertext) + decryptor.finalize()).decode()
+    result = (decryptor.update(ciphertext) + decryptor.finalize()).decode()
+    if result:
+        logging.info("Message decrypted!")
+    return result
 
 
 def get_public_key():
     try:
         response = requests.get(f"{server_url}/public_key/")
         response.raise_for_status()
+        if response:
+            logging.info("Got public key!")
         return response.json()["public_key"]
     except requests.RequestException as e:
+        logging.error(f"Request failed: {e}")
         print(f"Request failed: {e}")
         return ""
 
@@ -72,6 +86,7 @@ def set_session_key(session_key: bytes):
         response.raise_for_status()
         return response.json()
     except requests.RequestException as e:
+        logging.error(f"Request failed: {e}")
         print(f"Request failed: {e}")
         return {}
 
@@ -87,22 +102,30 @@ def send_message(message: str, session_id: str):
         response.raise_for_status()
         return response.json()
     except requests.RequestException as e:
+        logging.error(f"Request failed: {e}")
         print(f"Request failed: {e}")
         return {}
 
 
 def get_messages(session_id: str):
     try:
+        logging.info("Sending request!")
         response = requests.get(
             f"{server_url}/get_messages/", params={"session_id": session_id}
         )
         response.raise_for_status()
         encoded_messages = response.json()
-        return [
+        result = [
             decrypt_message(base64.b64decode(msg), session_key)
             for msg in encoded_messages
         ]
+        if result:
+            logging.info("Got messages!")
+        else:
+            logging.info("Did Not get messages.")
+        return result
     except requests.RequestException as e:
+        logging.error(f"Request failed: {e}")
         print(f"Request failed: {e}")
         return []
 
@@ -110,6 +133,7 @@ def get_messages(session_id: str):
 def start_client():
     public_key_pem = get_public_key()
     if not public_key_pem:
+        logging.error("Failed to get public key.")
         print("Failed to get public key.")
         return
 
@@ -122,34 +146,52 @@ def start_client():
     session_key = generate_session_key()
     response = set_session_key(session_key)
     if not response:
+        logging.error("Failed to set session key.")
         print("Failed to set session key.")
         return
 
     session_id = response.get("session_id")
     if not session_id:
+        logging.error("Failed to get session ID.")
         print("Failed to get session ID.")
         return
 
+    logging.info(f"Session established with ID: {session_id}")
     print(f"Session established with ID: {session_id}")
 
+    def user_send_message(action):
+        message = username + ":" + " " + action
+        response = send_message(message, session_id)
+        if response:
+            logging.info("Message Sent!")
+            print("Message Sent!")
+
+    def user_receive_messages():
+        messages = get_messages(session_id)
+        if messages:
+            logging.info("Messages received by client.")
+            print("\nMessages:")
+        else:
+            logging.info("NO messages received by client.")
+            print("NO messages received.")
+        for msg in messages:
+            print(f"- {msg}")
+
     while True:
+
         action = input(
-            "\nEnter 'send' to send a message or 'get' to retrieve messages (or 'quit' to exit): "
+            "\nEnter your message and press 'Enter' to send message or leave blanc and press 'Enter' to retrieve messages:\n "
         )
 
-        if action.lower() == "send":
-            message = input("Enter your message: ")
-            response = send_message(message, session_id)
-            if response:
-                print("Message Sent!")
+        if len(action) > 0:
+            user_send_message(action)
+            user_receive_messages()
 
-        elif action.lower() == "get":
-            messages = get_messages(session_id)
-            print("Messages:")
-            for msg in messages:
-                print(f"- {msg}")
+        elif len(action) == 0:
+            user_receive_messages()
 
         elif action.lower() == "quit":
+            logging.info("Exiting...")
             print("Exiting...")
             break
 
